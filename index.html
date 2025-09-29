@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bluetooth Battery</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; }
+  button { font-size: 1rem; padding: .7rem 1rem; margin-right: .5rem; }
+  #log { margin-top: 1rem; white-space: pre-wrap; border: 1px solid #ddd; padding: 1rem; border-radius: .5rem; }
+</style>
+<h1>Bluetooth Battery</h1>
+<p>Tap connect each time you open the page (required by Web Bluetooth).</p>
+<button id="btnSimple">Connect (Battery Service filter)</button>
+<button id="btnAll">Connect (try harder)</button>
+<div id="log">Idle.</div>
+
+<script>
+const logEl = document.getElementById('log');
+
+async function readBattery(request) {
+  logEl.textContent = 'Connecting...';
+  try {
+    const device = await navigator.bluetooth.requestDevice(request);
+    const server = await device.gatt.connect();
+
+    // Try standard Battery Service first
+    const svc = await server.getPrimaryService('battery_service');
+    const chr = await svc.getCharacteristic('battery_level');
+
+    // Read once
+    let v = await chr.readValue();
+    logEl.textContent = `Battery: ${v.getUint8(0)}%`;
+
+    // Listen for updates (not all devices support notifications)
+    try {
+      await chr.startNotifications();
+      chr.addEventListener('characteristicvaluechanged', e => {
+        logEl.textContent = `Battery: ${e.target.value.getUint8(0)}% (updated)`;
+      });
+    } catch (e) {
+      // Notifications not supported; ignore.
+    }
+
+    device.addEventListener('gattserverdisconnected', () => {
+      logEl.textContent += '\nDisconnected.';
+    });
+
+  } catch (err) {
+    logEl.textContent = 'Failed: ' + (err && err.message ? err.message : err);
+  }
+}
+
+document.getElementById('btnSimple').addEventListener('click', () => {
+  readBattery({
+    filters: [{ services: ['battery_service'] }]
+  });
+});
+
+document.getElementById('btnAll').addEventListener('click', () => {
+  readBattery({
+    acceptAllDevices: true,
+    optionalServices: ['battery_service']
+  });
+});
+</script>
+</html>
